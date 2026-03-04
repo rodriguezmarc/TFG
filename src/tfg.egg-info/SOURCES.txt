@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/data/__init__.py
+src/data/exploration.py
+src/data/sitk.py
+src/data/utilities.py
+src/data/acdc/__init__.py
+src/data/acdc/preprocess.py
+src/tfg.egg-info/PKG-INFO
+src/tfg.egg-info/SOURCES.txt
+src/tfg.egg-info/dependency_links.txt
+src/tfg.egg-info/top_level.txt
