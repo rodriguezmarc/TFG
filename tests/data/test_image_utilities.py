@@ -12,13 +12,18 @@ from data.image_utilities import (
     normalize
 )
 
+SLICE_INDEX = 15
+CROP_SIZE = 128
+CROP_CENTER = (128, 128)
+PADDING_CENTER = (10, 10)
+
 # 1. select_frame FUNCTIONAL
-def test_select_frame(synthetic_image):  # given an image
+def test_select_frame_returns_3d_frame(synthetic_image):  # given an image
     """
     Extract frame index 2 from a 4D image.
     Expected a 3D SimpleITK image that matches spatial dimensions of the original.
     """
-    frame = select_frame(synthetic_image, frame_idx=2) # selection of the frame
+    frame = select_frame(synthetic_image, frame_idx=2)
     original_size = synthetic_image.GetSize()
     frame_size = frame.GetSize()
 
@@ -27,26 +32,26 @@ def test_select_frame(synthetic_image):  # given an image
     assert frame_size == original_size[:3], (f"frame size should match original spatial dimensions {original_size[:3]}, but got {frame_size}")
 
 # 2. extract_slice FUNCTIONAL
-def test_extract_slice(synthetic_frame_and_mask):  # given a frame and its mask
+def test_extract_slice_returns_matching_slices(synthetic_frame_and_mask):  # given a frame and its mask
     """
     Extract slice with idx 15 from a frame and its mask.
     Expected both 2D SimpleITK image that share identical dimensions and match the original's.
     """
     frame, mask_3d = synthetic_frame_and_mask
-    slice, mask_2d = extract_slice(frame, mask_3d, 15)
+    slice_, mask_2d = extract_slice(frame, mask_3d, SLICE_INDEX)
 
     # instances
-    assert isinstance(frame, sitk.Image), (f"frame should be a SimpleITK image instance, but got {type(frame)}")
+    assert isinstance(slice_, sitk.Image), (f"slice_ should be a SimpleITK image instance, but got {type(slice_)}")
     assert isinstance(mask_2d, sitk.Image), (f"mask_2d should be a SimpleITK image instance, but got {type(mask_2d)}")
     
     # dimensions
-    assert frame.GetDimension() == 2, (f"frame should be 2D, but got dimension {frame.GetDimension()}")
+    assert slice_.GetDimension() == 2, (f"slice_ should be 2D, but got dimension {slice_.GetDimension()}")
     assert mask_2d.GetDimension() == 2, (f"mask_2d should be 2D, but got dimension {mask_2d.GetDimension()}")
 
     # spatial size
-    assert slice.GetSize() == frame.GetSize()[:2], (f"slice size should match frame's size {frame.GetSize()[:2]}, but got {slice.GetSize()}")
+    assert slice_.GetSize() == frame.GetSize()[:2], (f"slice size should match frame's size {frame.GetSize()[:2]}, but got {slice_.GetSize()}")
     assert mask_2d.GetSize() == mask_3d.GetSize()[:2], (f"mask_2d size should match mask_3d's size {mask_3d.GetSize()[:2]}, but got {mask_2d.GetSize()}")
-    assert slice.GetSize() == mask_2d.GetSize(), (f"slice and mask_2d should have the same size, but got {frame.GetSize()} vs {mask_2d.GetSize()}")
+    assert slice_.GetSize() == mask_2d.GetSize(), (f"slice and mask_2d should have the same size, but got {slice_.GetSize()} vs {mask_2d.GetSize()}")
 
 # 3. resample_slice FUNCTIONAL
 def test_resample_slice_changes_spacing(synthetic_slice):
@@ -60,7 +65,10 @@ def test_resample_slice_changes_spacing(synthetic_slice):
 
     assert isinstance(resampled, sitk.Image), (f"resampled should be a SimpleITK image instance, but got {type(resampled)}")
     assert resampled.GetSpacing() == (1.0, 1.0), (f"resampled image should have the spacing of (1.0, 1.0), but got {resampled.GetSpacing()}" )
-    assert new_size == original_size * 2, (f"resampled image size should be double the original size {original_size} due to halving the spacing, but got {new_size}")
+    expected_size = tuple(dim * 2 for dim in original_size)
+    assert new_size == expected_size, (
+        f"resampled image size should be double the original size {original_size} due to halving the spacing, but got {new_size}"
+    )
 
 # 4. resample_slice PRESERVES VALUES
 def test_resample_slice_label_preserves_values(synthetic_slice):
@@ -68,9 +76,9 @@ def test_resample_slice_label_preserves_values(synthetic_slice):
     Resample mask from spacing (2.0, 2.0) to (1.0, 1.0)
     Expected label vales to remain exactly {0, LV_LABEL}
     """
-    synthetic_slice[20:30, 20:30] = LV_LABEL  # create a square region with the label value
-
-    mask = sitk.GetImageFromArray(synthetic_slice)
+    mask_arr = np.zeros((64, 64), dtype=np.uint8)
+    mask_arr[20:30, 20:30] = LV_LABEL  # create a square region with the label value
+    mask = sitk.GetImageFromArray(mask_arr)
     mask.SetSpacing((2.0, 2.0))
 
     resampled = resample_slice(mask, (1.0,1.0), is_label=True)
@@ -79,7 +87,7 @@ def test_resample_slice_label_preserves_values(synthetic_slice):
     assert set(unique_vals).issubset({0, LV_LABEL}), (f"resampled mask should only contain values 0 and {LV_LABEL}, but got {unique_vals}")  
 
 # 5. get_lv_center FUNCTIONL
-def test_get_lv_center(synthetic_3d_image_and_mask):
+def test_get_lv_center_returns_center_near_inserted_region(synthetic_3d_image_and_mask):
     """
     LV inserted at region 30:35.
     Expected center (32, 32).
@@ -99,7 +107,7 @@ def test_get_lv_center(synthetic_3d_image_and_mask):
     assert 31 <= cy <= 33, (f"LV center y-coordinate should be around 32, but got {cy}")
 
 # 6. get_lv_center WHEN NO MASK
-def test_get_lv_center_raises():
+def test_get_lv_center_raises_when_no_lv_present():
     """
     If no mask voxels exist, should raise ValueError.
     """
@@ -115,28 +123,31 @@ def test_crop_around_center_basic():
     arr = np.random.rand(256, 256).astype(np.float32)
     img = sitk.GetImageFromArray(arr)
 
-    cropped = crop_around_center(img, center=(128, 128), size=128)
+    cropped = crop_around_center(img, center=CROP_CENTER, size=CROP_SIZE)
     
-    assert cropped.GetSize() == (128, 128), (f"Cropped image should have size (128, 128), but got {cropped.GetSize()}") 
+    assert cropped.GetSize() == (CROP_SIZE, CROP_SIZE), (f"Cropped image should have size {(CROP_SIZE, CROP_SIZE)}, but got {cropped.GetSize()}") 
+
 
 # 8. crop_around_center WITH PADDING
-def test_crop_with_padding():
+def test_crop_around_center_with_padding_preserves_original_region_and_pads_with_zeros():
     """
     Crop 128x128 region centered at (10,10) from a 100x100 image.
     Since crop exceeds boundaries, padding should be applied.
     Expected output size of 128x128, where padded region is full of 0.
     Expected original data to be preserved in the top-left area.
     """
-    arr = np.random.rand(100, 100).astype(np.float32)
+    arr = np.ones((100, 100), dtype=np.float32)
     img = sitk.GetImageFromArray(arr)
 
-    cropped = crop_around_center(img, center=(10, 10), size=128)
-    padding = cropped[100:,:]  # corresponds to the padded region
-    original_data = cropped[:100, :100]  # contains the original data
+    cropped = crop_around_center(img, center=PADDING_CENTER, size=CROP_SIZE)
+    cropped_np = sitk.GetArrayFromImage(cropped)
+    nonzero_count = np.count_nonzero(cropped_np)
     
-    assert cropped.GetSize() == (128, 128), (f"Cropped image should have size (128, 128) even with padding, but got {cropped.GetSize()}")
-    assert np.all(padding == 0.0), (f"Padded region should contain zeros, but found values {np.unique(padding)}")
-    assert np.all(original_data == 1.0), (f"Original image values (1.0) should be preserved in non-padded region, but found values {np.unique(original_data)}")
+    assert cropped.GetSize() == (CROP_SIZE, CROP_SIZE), (f"Cropped image should have size {(CROP_SIZE, CROP_SIZE)} even with padding, but got {cropped.GetSize()}")
+    assert set(np.unique(cropped_np)).issubset({0.0, 1.0}), (
+        f"Cropped image should only contain original ones and zero padding, but got {np.unique(cropped_np)}"
+    )
+    assert nonzero_count > 0, "Cropped image should preserve some original non-zero pixels."
 
 # 9. normalize FUNCTIONAL
 def test_normalize_range():

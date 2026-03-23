@@ -5,31 +5,29 @@ Preprocessing for ACDC dataset.
 from pathlib import Path
 import SimpleITK as sitk
 
-from data import load_data
-from acdc import ACDC_LABEL_MAP
-from image_utilities import (
+from data.acdc import load_data, ACDC_LABEL_MAP
+from data.image_utilities import (
     extract_slice,
-    resample_2d,
+    resample_slice,
     get_lv_center,
     crop_around_center,
     normalize,
 )
-from medical_utilities import (
-    compute_ef,
-)
+from data.medical_utilities import compute_ef
 
-def preprocess(config_path: Path) -> dict[str, str | int | float]:
+
+def preprocess(config_path: Path) -> tuple[sitk.Image, sitk.Image, float]:
     """
     Full preprocessing pipeline for ACDC dataset.
     """
     # --- load data ---
     (
-        # image,
+        image_4d,
         ed_image,
         ed_mask,
         es_image,
         es_mask,
-        # metadata,
+        metadata,
     ) = load_data(config_path)  # load the images and metadata
 
     # --- unify labels to standarize masks ---
@@ -37,11 +35,12 @@ def preprocess(config_path: Path) -> dict[str, str | int | float]:
     es_mask = sitk.ChangeLabel(es_mask, ACDC_LABEL_MAP)
 
     # --- frame selection & slice selection ---
-    es_slice, mask_slice = extract_slice(es_image, es_mask, es_image.size() // 2)
+    z_size = es_image.GetSize()[2]
+    es_slice, mask_slice = extract_slice(es_image, es_mask, z_size // 2)
                               
     # --- resampling ---
-    es_slice = resample_2d(es_slice)
-    mask_slice = resample_2d(mask_slice)
+    es_slice = resample_slice(es_slice)
+    mask_slice = resample_slice(mask_slice)
 
     # --- croping ---
     center = get_lv_center(mask_slice)

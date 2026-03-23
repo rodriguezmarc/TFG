@@ -8,7 +8,7 @@ from data.medical_utilities import (
     compute_ef,
 )
 
-TEST_IMAGE_SIZE = (5,5,5) 
+TEST_IMAGE_SIZE = (5, 5, 5) 
 TEST_IMAGE_SPACING = (2.0, 2.0, 2.0)
 
 # 1. compute_frame BASIC VOLUME 
@@ -40,11 +40,11 @@ def test_compute_frame_volume_no_label():
 
     assert volume_ml == 0.0, (f"Volume should be 0.0 ml when no voxels are present, but got {volume_ml} ml.")
 
-# 3. compute_frame ASINTROPIC SPACING
-def test_compute_frame_volume_asintropic_spacing():
+# 3. compute_frame ANISOTROPIC SPACING
+def test_compute_frame_volume_anisotropic_spacing():
     """
-    Test correct handling of asintropic spacing.
-    Spacig = (1,2,3) -> voxel volume = 6 mm3.
+    Test correct handling of anisotropic spacing.
+    Spacing = (1,2,3) mm -> voxel volume = 6 mm3.
     Mask with exactly 5 LV voxels.
     Expected LV volume: 5 * 6 = 30 mm3 = 0.03 mL.
     """
@@ -55,7 +55,7 @@ def test_compute_frame_volume_asintropic_spacing():
 
     volume_ml = compute_frame_volume(mask, LV_LABEL)
 
-    assert np.isclose(volume_ml, 0.03), (f"Volume should account for asintropic spacing corretcly. Expected 0.03 ml, but got {volume_ml} ml.")
+    assert np.isclose(volume_ml, 0.03), (f"Volume should account for anisotropic spacing correctly. Expected 0.03 ml, but got {volume_ml} ml.")
 
 # 4. compute_ef BASIC CASE
 def test_compute_ef_case_basic():
