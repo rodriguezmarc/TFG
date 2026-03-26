@@ -1,31 +1,10 @@
 """
 Top-level orchestration for dataset -> split -> preprocess -> prompt -> CSV.
 """
-import os
-import argparse
-from pathlib import Path
 
+from pathlib import Path
 from datasets.acdc.pipeline import build_rows
 from export.minim_csv import validate_minim_csv, write_minim_csv
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--dataset", "-d",
-    choices=["acdc", "ukbb"],
-    default="acdc",
-    help="Dataset to be process (default: acdc)"
-)
-args = parser.parse_args()
-
-dataset_paths = {
-    "acdc": "ACDC",
-    "ukbb": "UKBB",
-}
-
-data_path = dataset_paths.get(args.dataset, "ACDC")   # ACDC dataset fallback
-print(f"Processing {args.dataset} dataset...")
-
-print(f"Procesando dataset: {args.dataset}")
 
 def run__csv_pipeline(
     data_path: Path,                # dataset path where training data is stored
@@ -50,9 +29,12 @@ def run__csv_pipeline(
     return rows
 
 if __name__ == "__main__":
-    data_path = Path(data_path)
-    images_root = Path("output/images")
-    csv_root = Path("output/csv")
+    args = parse_args()
+    data_path = Path(DATASET_PATHS.get(args.dataset, "ACDC"))  # ACDC dataset fallback
+    print(f"Processing {args.dataset} dataset...")
+
+    images_root = OUTPUT_PATHS["images"]
+    csv_root = OUTPUT_PATHS["csv"]
 
     rows = run__csv_pipeline(
         data_path, 

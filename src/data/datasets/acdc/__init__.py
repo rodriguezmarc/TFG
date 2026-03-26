@@ -6,7 +6,7 @@ ACDC has sapcing 10mm on z-axis
 from pathlib import Path
 import SimpleITK as sitk
 
-from data import RV_LABEL, MYO_LABEL, LV_LABEL
+from datasets import RV_LABEL, MYO_LABEL, LV_LABEL
 
 ACDC_LABEL_MAP = {3: LV_LABEL, 2: MYO_LABEL, 1: RV_LABEL}
 ACDC_SPACING = (1.0, 1.0, 10.0)
