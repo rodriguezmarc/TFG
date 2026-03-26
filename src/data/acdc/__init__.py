@@ -36,18 +36,11 @@ def load_metadata(config_path: Path) -> dict[str, str | int | float]:
         k, v = l.split(": ")  # each line is divided into key and value
         d[k] = v
 
-    # bmi calculus
-    bmi = float(d["Weight"]) / (float(d["Height"]) / 100.0)
-    if bmi < 18.5: bmi = "underweight"
-    elif bmi < 25: bmi = "normal"
-    elif bmi < 30: bmi = "overweight"
-    else: bmi = "obese"
-
-    # dict with all the config parameters, including bmi
+    # dict with all the config parameters,
     return {
         "pid": config_path.parent.name,  # patient id is the name of the parent folder
         "pathology": d["Group"],  
-        "height": float(d["Height"]) / 100.0,  # to meters
+        "height": float(d["Height"]),  # in cm
         "weight": float(d["Weight"]),  # in kg
         "n_frames": int(d["NbFrame"]),
         "ed_frame": int(d["ED"]),

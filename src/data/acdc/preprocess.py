@@ -16,7 +16,7 @@ from data.image_utilities import (
 from data.medical_utilities import compute_ef
 
 
-def preprocess(config_path: Path) -> tuple[sitk.Image, sitk.Image, float]:
+def preprocess(config_path: Path) -> tuple[sitk.Image, sitk.Image, float, dict[str, str | int | float]]:
     """
     Full preprocessing pipeline for ACDC dataset.
     """
@@ -53,5 +53,5 @@ def preprocess(config_path: Path) -> tuple[sitk.Image, sitk.Image, float]:
     # --- EF calculus ---
     ef = compute_ef(ed_mask, es_mask)
 
-    return es_slice, mask_slice, ef
+    return es_slice, mask_slice, ef, metadata
 
