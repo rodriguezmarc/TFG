@@ -1,17 +1,38 @@
 """
-########################################
 Definition:
 Brief map of dataset-agnostic metadata normalization helpers.
 ---
-Params:
-None.
----
 Results:
-Provides BMI and pathology normalization utilities used by prompt generation.
-########################################
+Provides BMI, demographic, and disease normalization utilities used by prompt generation.
 """
 
 from __future__ import annotations
+
+
+def _get_first_value(metadata: dict, *keys: str) -> object | None:
+    """
+    ########################################
+    Definition:
+    Return the first non-empty metadata value available from a key list.
+    ---
+    Params:
+    metadata: Source metadata dictionary.
+    keys: Candidate keys to probe in order.
+    ---
+    Results:
+    Returns the selected value or `None` when none are available.
+    ########################################
+    """
+    for key in keys:
+        if key not in metadata:
+            continue
+        value = metadata[key]
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
 
 
 def _get_required_float(metadata: dict, *keys: str) -> float:
@@ -31,10 +52,26 @@ def _get_required_float(metadata: dict, *keys: str) -> float:
     Raises KeyError when none of the requested keys are present.
     ########################################
     """
-    for key in keys:
-        if key in metadata and metadata[key] is not None:
-            return float(metadata[key])
-    raise KeyError(f"Missing required metadata. Expected one of: {keys}")
+    value = _get_first_value(metadata, *keys)
+    if value is None:
+        raise KeyError(f"Missing required metadata. Expected one of: {keys}")
+    return float(value)
+
+
+def _normalize_free_text(value: object) -> str:
+    """
+    ########################################
+    Definition:
+    Normalize free-text metadata values into prompt-friendly lowercase text.
+    ---
+    Params:
+    value: Metadata value to normalize.
+    ---
+    Results:
+    Returns a stripped lowercase string with underscores replaced by spaces.
+    ########################################
+    """
+    return str(value).strip().replace("_", " ").lower()
 
 
 def compute_bmi_value(metadata: dict) -> float:
@@ -86,23 +123,90 @@ def compute_bmi_group(metadata: dict) -> str:
     return "obese"
 
 
-def compute_pathology(metadata: dict) -> str:
+def compute_age_group(metadata: dict) -> str | None:
     """
     ########################################
     Definition:
-    Normalize pathology codes into stable prompt-friendly text.
+    Convert a patient age into the simplified textual group used in prompts.
     ---
     Params:
-    metadata: Metadata dictionary containing a pathology field or original dataset group code.
+    metadata: Metadata dictionary containing an age field.
     ---
     Results:
-    Returns the normalized pathology description string.
-    ---
-    Other Information:
-    Unknown values fall back to lowercase text or a generic placeholder.
+    Returns one age-group label or `None` when age is unavailable.
     ########################################
     """
-    pathology = str(metadata.get("pathology", metadata.get("Group", ""))).strip().upper()
+    age = _get_first_value(metadata, "age", "Age")
+    if age is None:
+        return None
+
+    age_years = float(age)
+    if age_years < 18:
+        return "child"
+    if age_years < 40:
+        return "young adult"
+    if age_years < 65:
+        return "middle-aged"
+    return "elderly"
+
+
+def compute_sex_label(metadata: dict) -> str | None:
+    """
+    ########################################
+    Definition:
+    Normalize a sex field into stable prompt-friendly text.
+    ---
+    Params:
+    metadata: Metadata dictionary containing a sex field.
+    ---
+    Results:
+    Returns `male`, `female`, or `None` when unavailable.
+    ########################################
+    """
+    sex = _get_first_value(metadata, "sex", "Sex", "gender", "Gender")
+    if sex is None:
+        return None
+
+    normalized = _normalize_free_text(sex)
+    mapping = {
+        "m": "male",
+        "male": "male",
+        "man": "male",
+        "f": "female",
+        "female": "female",
+        "woman": "female",
+    }
+    return mapping.get(normalized)
+
+
+def compute_disease_label(metadata: dict) -> str | None:
+    """
+    ########################################
+    Definition:
+    Normalize disease codes into stable prompt-friendly text.
+    ---
+    Params:
+    metadata: Metadata dictionary containing a disease or pathology field.
+    ---
+    Results:
+    Returns the normalized disease description string or `None` when unavailable.
+    ---
+    Other Information:
+    Unknown values fall back to lowercase text.
+    ########################################
+    """
+    disease = _get_first_value(
+        metadata,
+        "disease",
+        "Disease",
+        "pathology",
+        "Pathology",
+        "Group",
+    )
+    if disease is None:
+        return None
+
+    pathology = str(disease).strip().upper()
     mapping = {
         "NOR": "healthy",
         "MINF": "myocardial infarction",
@@ -110,4 +214,20 @@ def compute_pathology(metadata: dict) -> str:
         "HCM": "hypertrophic cardiomyopathy",
         "RV": "abnormal right ventricle",
     }
-    return mapping.get(pathology, pathology.lower() if pathology else "unknown pathology")
+    return mapping.get(pathology, _normalize_free_text(disease))
+
+
+def compute_pathology(metadata: dict) -> str:
+    """
+    ########################################
+    Definition:
+    Provide a backward-compatible pathology label with a generic fallback.
+    ---
+    Params:
+    metadata: Metadata dictionary containing pathology information.
+    ---
+    Results:
+    Returns a normalized pathology string.
+    ########################################
+    """
+    return compute_disease_label(metadata) or "unknown pathology"

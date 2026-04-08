@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of medical measurement utilities derived from segmentation masks.
 ---
-Params:
-None.
----
 Results:
 Provides frame-volume and ejection-fraction calculations.
-########################################
 """
 
 import numpy as np

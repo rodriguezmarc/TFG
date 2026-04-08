@@ -1,79 +1,67 @@
 """
-########################################
 Definition:
 Brief map of the top-level dataset pipeline orchestration.
 ---
-Params:
-None.
----
 Results:
-Connects dataset builders, validation, split generation, and CSV writing.
-########################################
+Connects dataset drivers, validation, and CSV writing.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
 
-from data.acdc.pipeline import build_rows as build_acdc_rows
 from data.cli.data_cli import parse_args
 from data.cli.data_config import DATASET_PATHS, OUTPUT_PATHS
+from data.datasets.acdc.pipeline import ACDC_DRIVER
+from data.datasets.driver_contract import DatasetDriver
+from data.datasets.ukbb.pipeline import UKBB_DRIVER
 from data.export.minim_csv import validate_minim_csv, write_minim_csv
-from data.splits.patient_id_split import split_patient_ids
+from data.export.row_contract import DataRow
 
 Row = dict[str, str]
-DatasetBuilder = Callable[[Path, Path, str], list[Row]]
-
-DATASET_BUILDERS: dict[str, DatasetBuilder] = {
-    "acdc": build_acdc_rows,
+DATASET_DRIVERS: dict[str, DatasetDriver] = {
+    "acdc": ACDC_DRIVER,
+    "ukbb": UKBB_DRIVER,
 }
 
 
-def _build_output_csv_path(csv_root: Path, dataset: str, split_name: str | None = None) -> Path:
+def _build_output_csv_path(csv_root: Path, dataset: str) -> Path:
     """
     ########################################
     Definition:
-    Build the output CSV path for a dataset and optional split name.
+    Build the output CSV path for a dataset.
     ---
     Params:
     csv_root: Root directory for generated CSV files.
     dataset: Dataset identifier.
-    split_name: Optional split suffix such as train, val, or test.
     ---
     Results:
     Returns the CSV file path that should be written.
     ########################################
     """
-    suffix = f"_{split_name}" if split_name else ""
-    return csv_root / f"{dataset}{suffix}_minim.csv"
+    return csv_root / f"{dataset}_minim.csv"
 
 
-def _partition_rows_by_patient(rows: list[Row], seed: int) -> dict[str, list[Row]]:
+def _normalize_rows(rows: list[Row | DataRow]) -> list[Row]:
     """
     ########################################
     Definition:
-    Partition generated rows into train, validation, and test groups by patient id.
+    Normalize driver outputs into the canonical plain-dictionary row contract.
     ---
     Params:
-    rows: Row dictionaries that already contain a `patient_id` field.
-    seed: Random seed forwarded to the patient splitter.
+    rows: Driver outputs as dictionaries or `DataRow` instances.
     ---
     Results:
-    Returns a dictionary keyed by split name with the corresponding rows.
+    Returns a list of dictionaries with canonical row fields.
     ########################################
     """
-    patient_ids = sorted({row["patient_id"] for row in rows})
-    split_result = split_patient_ids(patient_ids, seed=seed)
-    split_sets = {
-        "train": set(split_result.train_ids),
-        "val": set(split_result.val_ids),
-        "test": set(split_result.test_ids),
-    }
-    return {
-        split_name: [row for row in rows if row["patient_id"] in patient_id_set]
-        for split_name, patient_id_set in split_sets.items()
-    }
+    normalized_rows: list[Row] = []
+    for row in rows:
+        if isinstance(row, DataRow):
+            normalized_rows.append(row.to_dict())
+        else:
+            normalized_rows.append(row)
+    return normalized_rows
 
 
 def run_csv_pipeline(
@@ -82,8 +70,6 @@ def run_csv_pipeline(
     csv_root: Path,                 # path where csv will be stored (output)
     dataset: str = "acdc",          # dataset identifier
     modality: str = "Cardiac MRI",  # modality identifier
-    split_mode: str = "combined",
-    seed: int = 42,
 ) -> list[Row]:
     """
     ########################################
@@ -94,48 +80,43 @@ def run_csv_pipeline(
     data_path: Dataset input root.
     images_root: Directory where processed images are stored.
     csv_root: Directory where CSV manifests are stored.
-    dataset: Dataset identifier used to select the builder.
+    dataset: Dataset identifier used to select the driver.
     modality: Modality label written into exported rows.
-    split_mode: Whether to write one combined CSV or one CSV per split.
-    seed: Random seed used for patient-level splitting.
-    ---
     Results:
     Returns the list of generated rows after validation and CSV writing.
     ---
     Other Information:
-    Raises ValueError when the requested dataset builder is not registered.
+    Raises ValueError when the requested dataset driver is not registered.
     ########################################
     """
     try:
-        dataset_builder = DATASET_BUILDERS[dataset]
+        dataset_driver = DATASET_DRIVERS[dataset]
     except KeyError as exc:
         raise ValueError(f"Unsupported dataset '{dataset}'.") from exc
 
-    rows = dataset_builder(
-        data_path=data_path,
-        images_root=images_root,
-        modality=modality,
-    )
-    validate_minim_csv(rows, images_root)
+    output_csv_path = _build_output_csv_path(csv_root, dataset)
+    print(f"Starting {dataset.upper()} preprocessing...")
+    print(f"Reading data from {data_path}.")
 
-    if split_mode == "per-split":
-        split_rows = _partition_rows_by_patient(rows, seed=seed)
-        for split_name, rows_for_split in split_rows.items():
-            write_minim_csv(
-                rows_for_split,
-                _build_output_csv_path(csv_root, dataset, split_name=split_name),
-            )
-    else:
-        write_minim_csv(rows, _build_output_csv_path(csv_root, dataset))
+    rows = _normalize_rows(
+        dataset_driver.build_rows(
+            data_path=data_path,
+            images_root=images_root,
+            modality=modality,
+        )
+    )
+
+    print(f"Prepared {len(rows)} rows. Writing outputs to {images_root}.")
+    validate_minim_csv(rows, images_root)
+    write_minim_csv(rows, output_csv_path)
+    print(f"{dataset.upper()} export completed successfully.")
 
     return rows
 
 
 if __name__ == "__main__":
     args = parse_args()
-    data_path = Path(DATASET_PATHS.get(args.dataset, Path("ACDC")))
-    print(f"Processing {args.dataset} dataset...")
-
+    data_path = Path(DATASET_PATHS.get(args.dataset, Path("ACDC")))  # fallback to acdc
     images_root = OUTPUT_PATHS["images"]
     csv_root = OUTPUT_PATHS["csv"]
 
@@ -144,8 +125,6 @@ if __name__ == "__main__":
         images_root,
         csv_root,
         dataset=args.dataset,
-        split_mode=args.split,
-        seed=args.seed,
     )
 
-    print(f"Processed {len(rows)} patients.")
+    print(f"Finished processing {len(rows)} cases.")

@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of the ACDC preprocessing routine from raw images to export-ready slices.
 ---
-Params:
-None.
----
 Results:
 Provides the dataset-specific preprocessing entrypoint.
-########################################
 """
 
 from __future__ import annotations
@@ -16,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 import SimpleITK as sitk
 
-from data.acdc import ACDC_LABEL_MAP, load_data
+from data.datasets.acdc import ACDC_LABEL_MAP, load_data
 from data.utilities.image_utilities import (
     extract_slice,
     select_mask_slice,

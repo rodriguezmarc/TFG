@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of utilities for reproducible patient-level dataset splitting.
 ---
-Params:
-None.
----
 Results:
 Defines the split result container and the splitting function.
-########################################
 """
 
 from __future__ import annotations

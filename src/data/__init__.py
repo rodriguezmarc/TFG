@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of shared dataset label constants used across the project.
 ---
-Params:
-None.
----
 Results:
 Exports canonical label ids and their human-readable names.
-########################################
 """
 
 # --- labels: important to unify them with the rest of the datasets ---
@@ -20,3 +15,4 @@ LABEL_TO_NAME = {
     MYO_LABEL: "MYO",
     LV_LABEL: "LV",
 }
+

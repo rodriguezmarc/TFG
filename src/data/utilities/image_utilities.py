@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of image utilities for frame extraction, resampling, cropping, and normalization.
 ---
-Params:
-None.
----
 Results:
 Provides reusable image-processing helpers for the data pipeline.
-########################################
 """
 
 import numpy as np

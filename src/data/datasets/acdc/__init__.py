@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of ACDC dataset loading, metadata parsing, and NIfTI header sanitation.
 ---
-Params:
-None.
----
 Results:
 Exports label mappings plus helpers to read metadata and image volumes safely.
-########################################
 """
 
 from __future__ import annotations

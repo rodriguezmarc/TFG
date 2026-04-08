@@ -1,14 +1,10 @@
 """
-########################################
 Definition:
 Brief map of MINIM CSV writing and row validation utilities.
 ---
-Params:
-None.
----
 Results:
 Provides helpers to write manifests and validate exported image rows.
-########################################
+
 """
 
 from __future__ import annotations
@@ -17,6 +13,7 @@ import csv
 from pathlib import Path
 
 MINIM_COLUMNS = ("path", "text", "modality")
+REQUIRED_ROW_COLUMNS = ("path", "text", "modality", "patient_id", "dataset")
 
 
 def write_minim_csv(rows: list[dict[str, str]], output_csv_path: Path) -> None:
@@ -41,6 +38,7 @@ def write_minim_csv(rows: list[dict[str, str]], output_csv_path: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=list(MINIM_COLUMNS), extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+    print(f"CSV created at {output_csv_path}.")
 
 
 def validate_minim_csv(rows: list[dict[str, str]], images_root: Path) -> None:
@@ -60,15 +58,18 @@ def validate_minim_csv(rows: list[dict[str, str]], images_root: Path) -> None:
     The function returns `None` when validation succeeds.
     ########################################
     """
+    print("Validating CSV contents...")
     seen_paths: set[str] = set()
     for idx, row in enumerate(rows):
-        missing_cols = [col for col in MINIM_COLUMNS if col not in row]
+        missing_cols = [col for col in REQUIRED_ROW_COLUMNS if col not in row]
         if missing_cols:
             raise ValueError(f"Row {idx} missing columns: {missing_cols}")
 
         rel_path = row["path"].strip()
         text = row["text"].strip()
         modality = row["modality"].strip()
+        patient_id = row["patient_id"].strip()
+        dataset = row["dataset"].strip()
 
         if not rel_path:
             raise ValueError(f"Row {idx} has empty path.")
@@ -76,6 +77,10 @@ def validate_minim_csv(rows: list[dict[str, str]], images_root: Path) -> None:
             raise ValueError(f"Row {idx} has empty text.")
         if not modality:
             raise ValueError(f"Row {idx} has empty modality.")
+        if not patient_id:
+            raise ValueError(f"Row {idx} has empty patient_id.")
+        if not dataset:
+            raise ValueError(f"Row {idx} has empty dataset.")
         if rel_path in seen_paths:
             raise ValueError(f"Duplicated path in CSV rows: {rel_path}")
 
@@ -83,3 +88,4 @@ def validate_minim_csv(rows: list[dict[str, str]], images_root: Path) -> None:
         if not image_path.exists():
             raise ValueError(f"Image path does not exist: {image_path}")
         seen_paths.add(rel_path)
+    print("CSV validated successfully.")

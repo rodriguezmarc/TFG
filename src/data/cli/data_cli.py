@@ -1,14 +1,9 @@
 """
-########################################
 Definition:
 Brief map of CLI argument parsing for the dataset pipeline entrypoint.
 ---
-Params:
-None.
----
 Results:
 Builds and returns parsed command-line arguments.
-########################################
 """
 
 import argparse
@@ -24,7 +19,7 @@ def parse_args():
     None.
     ---
     Results:
-    Returns an argparse namespace with dataset, split mode, and seed values.
+    Returns an argparse namespace with the selected dataset value.
     ---
     Other Information:
     Centralizes the CLI contract for `python -m data.run_pipeline`.
@@ -39,20 +34,6 @@ def parse_args():
         choices=["acdc", "ukbb"],
         default="acdc",
         help="Dataset to process (default: acdc)"
-    )
-
-    parser.add_argument(
-        "--split", "-s",
-        choices=["combined", "per-split"],
-        default="combined",
-        help="CSV export mode: a single manifest or one CSV per split."
-    )
-
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed used for patient-level splits."
     )
 
     return parser.parse_args()

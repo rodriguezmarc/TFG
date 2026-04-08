@@ -5,4 +5,5 @@ dependencies = [
     "nibabel",
     "numpy",
     "SimpleITK",
+    "pytest",
 ]
