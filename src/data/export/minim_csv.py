@@ -1,5 +1,14 @@
 """
-CSV writer and validation utilities for MINIM.
+########################################
+Definition:
+Brief map of MINIM CSV writing and row validation utilities.
+---
+Params:
+None.
+---
+Results:
+Provides helpers to write manifests and validate exported image rows.
+########################################
 """
 
 from __future__ import annotations
@@ -12,18 +21,44 @@ MINIM_COLUMNS = ("path", "text", "modality")
 
 def write_minim_csv(rows: list[dict[str, str]], output_csv_path: Path) -> None:
     """
-    Write rows to CSV with MINIM-compatible columns.
+    ########################################
+    Definition:
+    Write manifest rows using the MINIM column schema.
+    ---
+    Params:
+    rows: List of standardized row dictionaries to serialize.
+    output_csv_path: Destination path for the CSV file.
+    ---
+    Results:
+    Creates parent directories when needed and writes the CSV to disk.
+    ---
+    Other Information:
+    Extra row keys are ignored to preserve a stable export schema.
+    ########################################
     """
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
     with Path.open(output_csv_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(MINIM_COLUMNS))
+        writer = csv.DictWriter(f, fieldnames=list(MINIM_COLUMNS), extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
 
 def validate_minim_csv(rows: list[dict[str, str]], images_root: Path) -> None:
     """
-    Validate MINIM rows before writing/using the CSV.
+    ########################################
+    Definition:
+    Validate that MINIM rows are structurally correct and point to real images.
+    ---
+    Params:
+    rows: List of manifest rows to inspect.
+    images_root: Base directory used to resolve each relative image path.
+    ---
+    Results:
+    Raises a ValueError when required columns, values, uniqueness, or files are invalid.
+    ---
+    Other Information:
+    The function returns `None` when validation succeeds.
+    ########################################
     """
     seen_paths: set[str] = set()
     for idx, row in enumerate(rows):

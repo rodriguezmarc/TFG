@@ -1,5 +1,14 @@
 """
-Patient-level train/val/test split utilities.
+########################################
+Definition:
+Brief map of utilities for reproducible patient-level dataset splitting.
+---
+Params:
+None.
+---
+Results:
+Defines the split result container and the splitting function.
+########################################
 """
 
 from __future__ import annotations
@@ -10,6 +19,20 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SplitResult:
+    """
+    ########################################
+    Definition:
+    Store patient ids assigned to each dataset split.
+    ---
+    Params:
+    train_ids: Patient ids assigned to the training split.
+    val_ids: Patient ids assigned to the validation split.
+    test_ids: Patient ids assigned to the test split.
+    ---
+    Results:
+    Provides an immutable container for split outputs.
+    ########################################
+    """
     train_ids: list[str]
     val_ids: list[str]
     test_ids: list[str]
@@ -23,7 +46,23 @@ def split_patient_ids(
     seed: int = 42,
 ) -> SplitResult:
     """
-    Split patient IDs reproducibly at patient level.
+    ########################################
+    Definition:
+    Split patient ids into train, validation, and test sets.
+    ---
+    Params:
+    patient_ids: Ordered or unordered patient identifiers to split.
+    train_ratio: Fraction assigned to training.
+    val_ratio: Fraction assigned to validation.
+    test_ratio: Fraction assigned to testing.
+    seed: Random seed used for reproducible shuffling.
+    ---
+    Results:
+    Returns a `SplitResult` containing the three patient-id lists.
+    ---
+    Other Information:
+    The ratios must sum to `1.0` or the function raises a ValueError.
+    ########################################
     """
     total = train_ratio + val_ratio + test_ratio
     if abs(total - 1.0) > 1e-6:

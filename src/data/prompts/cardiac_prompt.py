@@ -1,28 +1,54 @@
 """
-Cardiac prompt generation utilities.
+########################################
+Definition:
+Brief map of prompt helpers for turning cardiac metadata into MINIM text.
+---
+Params:
+None.
+---
+Results:
+Provides EF normalization, EF categorization, and prompt generation helpers.
+########################################
 """
 
-from pathlib import Path
+from __future__ import annotations
 
-from data import compute_bmi, compute_pathology
-from data.acdc import load_metadata
-from data.acdc.preprocess import preprocess
+from data.utilities.dataset_utilities import compute_bmi_group, compute_pathology
 
 
-def _to_ef_percentage(ef: float) -> float:
+def to_ef_percentage(ef: float) -> float:
     """
-    Convert EF to percentage.
-
-    Accepts EF as ratio [0,1] or as percentage [0,100].
+    ########################################
+    Definition:
+    Normalize an EF value into percentage form.
+    ---
+    Params:
+    ef: Ejection fraction expressed either as a ratio or percentage.
+    ---
+    Results:
+    Returns EF as a percentage in the `[0, 100]` style range.
+    ---
+    Other Information:
+    Values less than or equal to `1.0` are interpreted as ratios.
+    ########################################
     """
     return ef * 100.0 if ef <= 1.0 else ef
 
 
 def classify_ef(ef: float) -> str:
     """
-    Map EF value to clinically-used category.
+    ########################################
+    Definition:
+    Map an EF value to the prompt category used by the project.
+    ---
+    Params:
+    ef: Ejection fraction expressed as ratio or percentage.
+    ---
+    Results:
+    Returns one of the supported EF class labels.
+    ########################################
     """
-    ef_pct = _to_ef_percentage(float(ef))
+    ef_pct = to_ef_percentage(float(ef))
 
     if ef_pct <= 40.0:
         return "reduced EF"
@@ -31,34 +57,25 @@ def classify_ef(ef: float) -> str:
     return "normal EF"
 
 
-def prompt_generation(metadata: dict, ef: float | None = None) -> str:
+def build_cardiac_prompt(metadata: dict, ef: float) -> str:
     """
-    Generate a prompt for synthetic image generation.
+    ########################################
+    Definition:
+    Build the normalized cardiac MRI prompt from metadata and EF.
+    ---
+    Params:
+    metadata: Patient or study metadata with pathology and body measurements.
+    ef: Ejection fraction value to classify.
+    ---
+    Results:
+    Returns the final prompt string used in CSV export.
+    ########################################
     """
-    bmi = compute_bmi(metadata)
-    group = compute_pathology(metadata)
-    ef_value = metadata.get("ef") if ef is None else ef
+    bmi_group = compute_bmi_group(metadata)
+    pathology = compute_pathology(metadata)
+    ef_category = classify_ef(float(ef))
 
-    if ef_value is None:
-        raise ValueError("EF is required to generate the prompt.")
-
-    ef_category = classify_ef(float(ef_value))
     return (
         "Cardiac MRI, short-axis view, "
-        f"{bmi} BMI, {group} condition, {ef_category}."
+        f"{bmi_group}, {pathology} condition, {ef_category}."
     )
-
-
-def prompt_generation_from_acdc(config_path: Path) -> str:
-    """
-    Run ACDC preprocessing and generate a prompt with EF.
-    """
-    _, _, ef = preprocess(config_path)
-    metadata = load_metadata(config_path)
-    metadata_for_prompt = {
-        "Weight": metadata["weight"],
-        "Height": metadata["height"] * 100.0,  # convert m -> cm
-        "Group": metadata["pathology"],
-        "ef": ef,
-    }
-    return prompt_generation(metadata_for_prompt)
