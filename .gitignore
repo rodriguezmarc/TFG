@@ -2,6 +2,10 @@ ACDC/
 tests/
 docs/
 output/
+outputs/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+temp/
+models/base/stable-diffusion-v1-4/
+!models/base/README.md

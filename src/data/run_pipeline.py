@@ -8,10 +8,10 @@ Connects dataset drivers, validation, and CSV writing.
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
-from data.cli.data_cli import parse_args
-from data.cli.data_config import DATASET_PATHS, OUTPUT_PATHS
+from data.config import DATASET_PATHS, OUTPUT_PATHS
 from data.datasets.acdc.pipeline import ACDC_DRIVER
 from data.datasets.driver_contract import DatasetDriver
 from data.datasets.ukbb.pipeline import UKBB_DRIVER
@@ -42,6 +42,23 @@ def _build_output_csv_path(csv_root: Path, dataset: str) -> Path:
     return csv_root / f"{dataset}_minim.csv"
 
 
+def _build_internal_csv_path(internal_root: Path, dataset: str) -> Path:
+    """
+    ########################################
+    Definition:
+    Build the internal canonical-row CSV path for a dataset.
+    ---
+    Params:
+    internal_root: Root directory for canonical split-capable manifests.
+    dataset: Dataset identifier.
+    ---
+    Results:
+    Returns the CSV path used to persist the full internal row contract.
+    ########################################
+    """
+    return internal_root / f"{dataset}_rows.csv"
+
+
 def _normalize_rows(rows: list[Row | DataRow]) -> list[Row]:
     """
     ########################################
@@ -64,10 +81,56 @@ def _normalize_rows(rows: list[Row | DataRow]) -> list[Row]:
     return normalized_rows
 
 
+def write_internal_rows(rows: list[Row], output_csv_path: Path) -> None:
+    """
+    ########################################
+    Definition:
+    Persist the full canonical row contract required for downstream splits.
+    ---
+    Params:
+    rows: Canonical rows including internal-only fields.
+    output_csv_path: Destination path for the internal CSV.
+    ---
+    Results:
+    Writes a CSV with all canonical fields.
+    ########################################
+    """
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with Path.open(output_csv_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["path", "text", "modality", "patient_id", "dataset"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def load_internal_rows(internal_root: Path, dataset: str) -> list[Row]:
+    """
+    ########################################
+    Definition:
+    Load the persisted canonical row contract for one dataset.
+    ---
+    Params:
+    internal_root: Root directory containing canonical row CSVs.
+    dataset: Dataset identifier.
+    ---
+    Results:
+    Returns the canonical rows required for split generation.
+    ########################################
+    """
+    internal_csv_path = _build_internal_csv_path(internal_root, dataset)
+    if not internal_csv_path.exists():
+        raise FileNotFoundError(
+            f"Missing internal manifest for dataset '{dataset}' at {internal_csv_path}. "
+            f"Run `python prepare -d {dataset}` first."
+        )
+    with Path.open(internal_csv_path, encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 def run_csv_pipeline(
     data_path: Path,                # dataset path where training data is stored
     images_root: Path,              # path where images will be stored (output)
     csv_root: Path,                 # path where csv will be stored (output)
+    internal_root: Path | None = None,
     dataset: str = "acdc",          # dataset identifier
     modality: str = "Cardiac MRI",  # modality identifier
 ) -> list[Row]:
@@ -95,6 +158,9 @@ def run_csv_pipeline(
         raise ValueError(f"Unsupported dataset '{dataset}'.") from exc
 
     output_csv_path = _build_output_csv_path(csv_root, dataset)
+    if internal_root is None:
+        internal_root = OUTPUT_PATHS["internal"]
+    internal_csv_path = _build_internal_csv_path(internal_root, dataset)
     print(f"Starting {dataset.upper()} preprocessing...")
     print(f"Reading data from {data_path}.")
 
@@ -109,22 +175,7 @@ def run_csv_pipeline(
     print(f"Prepared {len(rows)} rows. Writing outputs to {images_root}.")
     validate_minim_csv(rows, images_root)
     write_minim_csv(rows, output_csv_path)
+    write_internal_rows(rows, internal_csv_path)
     print(f"{dataset.upper()} export completed successfully.")
 
     return rows
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    data_path = Path(DATASET_PATHS.get(args.dataset, Path("ACDC")))  # fallback to acdc
-    images_root = OUTPUT_PATHS["images"]
-    csv_root = OUTPUT_PATHS["csv"]
-
-    rows = run_csv_pipeline(
-        data_path,
-        images_root,
-        csv_root,
-        dataset=args.dataset,
-    )
-
-    print(f"Finished processing {len(rows)} cases.")
