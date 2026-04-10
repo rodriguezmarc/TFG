@@ -67,9 +67,27 @@ def split_patient_ids(
     random.Random(seed).shuffle(ids)
 
     n = len(ids)
+    if n == 0:
+        return SplitResult(train_ids=[], val_ids=[], test_ids=[])
+
     n_train = int(n * train_ratio)
     n_val = int(n * val_ratio)
     n_test = n - n_train - n_val
+
+    # Keep tiny dataset sanity runs usable by reserving one patient for each
+    # requested non-zero split whenever enough patients are available.
+    if n >= 3:
+        if train_ratio > 0 and n_train == 0:
+            n_train = 1
+        if val_ratio > 0 and n_val == 0:
+            n_val = 1
+        n_test = n - n_train - n_val
+        if test_ratio > 0 and n_test == 0:
+            if n_train > 1:
+                n_train -= 1
+            elif n_val > 1:
+                n_val -= 1
+            n_test = n - n_train - n_val
 
     train_ids = ids[:n_train]
     val_ids = ids[n_train : n_train + n_val]

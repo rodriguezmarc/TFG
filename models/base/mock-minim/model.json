@@ -1,0 +1,10 @@
+{
+  "model_id": "mock-minim",
+  "backend": "mock",
+  "description": "Lightweight deterministic MINIM-compatible model used for pipeline validation.",
+  "artifact_contract": {
+    "training_output": "mock_model.json",
+    "generation_output": "PNG images in the prepared run generated directory",
+    "evaluation": "Delegated to minim.metrics.evaluate_from_manifest"
+  }
+}

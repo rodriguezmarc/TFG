@@ -157,6 +157,15 @@ def run_csv_pipeline(
     except KeyError as exc:
         raise ValueError(f"Unsupported dataset '{dataset}'.") from exc
 
+    if not data_path.exists():
+        raise FileNotFoundError(
+            f"Dataset root for '{dataset}' does not exist at {data_path}."
+        )
+    if not data_path.is_dir():
+        raise NotADirectoryError(
+            f"Dataset root for '{dataset}' is not a directory: {data_path}."
+        )
+
     output_csv_path = _build_output_csv_path(csv_root, dataset)
     if internal_root is None:
         internal_root = OUTPUT_PATHS["internal"]
@@ -171,6 +180,12 @@ def run_csv_pipeline(
             modality=modality,
         )
     )
+
+    if not rows:
+        raise ValueError(
+            f"No rows were generated for dataset '{dataset}' from {data_path}. "
+            "Check the dataset layout and dataset-specific loader assumptions."
+        )
 
     print(f"Prepared {len(rows)} rows. Writing outputs to {images_root}.")
     validate_minim_csv(rows, images_root)

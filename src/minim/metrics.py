@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -21,10 +22,15 @@ import torchvision.transforms as transforms
 from PIL import Image
 from scipy.linalg import sqrtm
 
+from minim.constants import METRIC_MODES
+
 try:
     from pytorch_msssim import ms_ssim
 except ImportError:  # pragma: no cover - dependency is optional until runtime evaluation
     ms_ssim = None
+
+
+TORCH_CACHE_ROOT = Path("outputs/cache/torch")
 
 
 def _load_rgb_images(paths: list[Path], image_size: int = 299) -> torch.Tensor:
@@ -88,6 +94,47 @@ def _generated_paths_from_dir(generated_dir: Path) -> list[Path]:
     return sorted(path for path in generated_dir.iterdir() if path.suffix.lower() in {".png", ".jpg", ".jpeg"})
 
 
+def _configure_torch_cache() -> None:
+    """
+    ########################################
+    Definition:
+    Point Torch Hub downloads to a writable project-local cache directory.
+    ---
+    Params:
+    None.
+    ---
+    Results:
+    Ensures torchvision weights can be cached inside the repository outputs tree.
+    ########################################
+    """
+    cache_root = Path(os.environ.get("TORCH_HOME", TORCH_CACHE_ROOT))
+    cache_root.mkdir(parents=True, exist_ok=True)
+    os.environ["TORCH_HOME"] = str(cache_root.resolve())
+    torch.hub.set_dir(str(cache_root.resolve()))
+
+
+def _stabilize_single_sample_features(features: np.ndarray) -> np.ndarray:
+    """
+    ########################################
+    Definition:
+    Duplicate single-sample features so tiny evaluations do not crash.
+    ---
+    Params:
+    features: Feature matrix extracted from one or more images.
+    ---
+    Results:
+    Returns at least two feature rows for covariance-based metrics.
+    ---
+    Other Information:
+    Metrics computed from duplicated single samples are only suitable for
+    pipeline sanity checks and are not statistically meaningful.
+    ########################################
+    """
+    if features.shape[0] >= 2:
+        return features
+    return np.repeat(features, 2, axis=0)
+
+
 def load_inception_model(device: str) -> torch.nn.Module:
     """
     ########################################
@@ -101,6 +148,7 @@ def load_inception_model(device: str) -> torch.nn.Module:
     Returns the initialized feature extractor in evaluation mode.
     ########################################
     """
+    _configure_torch_cache()
     weights = models.Inception_V3_Weights.DEFAULT
     inception = models.inception_v3(weights=weights, transform_input=False)
     inception.fc = torch.nn.Identity()
@@ -192,12 +240,21 @@ def calculate_ms_ssim(real_images: torch.Tensor, generated_images: torch.Tensor)
     return float(ms_ssim(real_images, generated_images, data_range=1.0, size_average=True).item())
 
 
+MetricValue = float | int | str | None
+
+
+def _write_metrics(metrics: dict[str, MetricValue], output_json_path: Path) -> None:
+    output_json_path.parent.mkdir(parents=True, exist_ok=True)
+    output_json_path.write_text(json.dumps(metrics, indent=2, allow_nan=False), encoding="utf-8")
+
+
 def evaluate_from_manifest(
     real_manifest_path: Path,
     generated_dir: Path,
     device: str = "cpu",
     output_json_path: Path | None = None,
-) -> dict[str, float | int]:
+    mode: str = "full",
+) -> dict[str, MetricValue]:
     """
     ########################################
     Definition:
@@ -208,11 +265,17 @@ def evaluate_from_manifest(
     generated_dir: Directory containing generated images.
     device: Execution device for metric computation.
     output_json_path: Optional path where metrics are serialized as JSON.
+    mode: Metric mode. `full` computes Inception-backed metrics when possible; `local` avoids downloads.
     ---
     Results:
     Returns the computed evaluation metrics.
     ########################################
     """
+    mode = mode.strip().lower()
+    if mode not in METRIC_MODES:
+        allowed = ", ".join(METRIC_MODES)
+        raise ValueError(f"Unknown metric mode '{mode}'. Expected one of: {allowed}")
+
     real_paths = _real_paths_from_manifest(real_manifest_path)
     generated_paths = _generated_paths_from_dir(generated_dir)
     sample_count = min(len(real_paths), len(generated_paths))
@@ -221,24 +284,45 @@ def evaluate_from_manifest(
 
     real_images = _load_rgb_images(real_paths[:sample_count])
     generated_images = _load_rgb_images(generated_paths[:sample_count])
-    inception = load_inception_model(device)
+    inception_error: str | None = None
+    if mode == "local":
+        fid = None
+        inception_score = None
+        inception_error = "Metric mode 'local' skips Inception-backed FID and Inception Score."
+    else:
+        try:
+            inception = load_inception_model(device)
+            real_features = _stabilize_single_sample_features(_extract_features(inception, real_images, device))
+            generated_features = _stabilize_single_sample_features(_extract_features(inception, generated_images, device))
+            with torch.no_grad():
+                _configure_torch_cache()
+                generated_logits = models.inception_v3(weights=models.Inception_V3_Weights.DEFAULT).to(device).eval()(
+                    generated_images.to(device)
+                )
+            fid = calculate_fid(real_features, generated_features)
+            inception_score = calculate_inception_score(generated_logits)
+        except Exception as exc:
+            inception_error = str(exc)
+            fid = None
+            inception_score = None
 
-    real_features = _extract_features(inception, real_images, device)
-    generated_features = _extract_features(inception, generated_images, device)
-    with torch.no_grad():
-        generated_logits = models.inception_v3(weights=models.Inception_V3_Weights.DEFAULT).to(device).eval()(
-            generated_images.to(device)
-        )
-
-    metrics = {
+    metrics: dict[str, MetricValue] = {
         "sample_count": sample_count,
-        "fid": calculate_fid(real_features, generated_features),
-        "is": calculate_inception_score(generated_logits),
+        "mode": mode,
+        "fid": fid,
+        "is": inception_score,
         "ms_ssim": calculate_ms_ssim(real_images, generated_images),
     }
+    if inception_error is not None:
+        if mode == "local":
+            metrics["note"] = inception_error
+        else:
+            metrics["note"] = (
+                "FID and Inception Score were skipped because Inception v3 weights were unavailable. "
+                f"Original error: {inception_error}"
+            )
     if output_json_path is not None:
-        output_json_path.parent.mkdir(parents=True, exist_ok=True)
-        output_json_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        _write_metrics(metrics, output_json_path)
     return metrics
 
 
@@ -260,6 +344,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generated-dir", type=Path, required=True)
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--output-json", type=Path, default=None)
+    parser.add_argument("--mode", choices=METRIC_MODES, default="full")
     return parser.parse_args()
 
 
@@ -282,8 +367,9 @@ def main() -> None:
         generated_dir=args.generated_dir,
         device=args.device,
         output_json_path=args.output_json,
+        mode=args.mode,
     )
-    print(json.dumps(metrics, indent=2))
+    print(json.dumps(metrics, indent=2, allow_nan=False))
 
 
 if __name__ == "__main__":

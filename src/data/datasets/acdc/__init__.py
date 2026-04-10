@@ -9,6 +9,7 @@ Exports label mappings plus helpers to read metadata and image volumes safely.
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 
@@ -20,7 +21,22 @@ from data import RV_LABEL, MYO_LABEL, LV_LABEL
 
 ACDC_LABEL_MAP = {3: LV_LABEL, 2: MYO_LABEL, 1: RV_LABEL}
 ACDC_SPACING = (1.0, 1.0, 10.0)
-SANITIZED_NIFTI_CACHE_DIR = Path(tempfile.gettempdir()) / "tfg_nifti_cache"
+
+
+def _resolve_cache_root() -> Path:
+    """Return the cache directory for sanitized NIfTI files."""
+    override = os.environ.get("TFG_NIFTI_CACHE_DIR")
+    if override:
+        return Path(override)
+
+    try:
+        return Path(tempfile.gettempdir()) / "tfg_nifti_cache"
+    except (FileNotFoundError, OSError):
+        repo_root = Path(__file__).resolve().parents[4]
+        return repo_root / "outputs" / "tmp" / "tfg_nifti_cache"
+
+
+SANITIZED_NIFTI_CACHE_DIR = _resolve_cache_root()
 
 
 def _get_nifti_axis_scales(affine: np.ndarray) -> np.ndarray:

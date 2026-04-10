@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tfg"
 version = "0.1.0"
@@ -25,6 +29,13 @@ dependencies = [
 ]
 
 [project.scripts]
-prepare = "tfg_cli.prepare:main"
-evaluate = "tfg_cli.evaluate:main"
-run = "tfg_cli.run:main"
+prepare = "cli.prepare:main"
+evaluate = "cli.evaluate:main"
+run = "cli.run:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cli*", "data*", "minim*"]
